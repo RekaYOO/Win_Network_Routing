@@ -41,4 +41,7 @@ custom_routes.json
 
 # System files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Configuration files
+network_config.json 
