@@ -45,18 +45,20 @@ def reset_settings():
     
     # 重置跃点数
     try:
+        # 重置 IPv4 跃点数为自动
         subprocess.run(['netsh', 'interface', 'ipv4', 'set', 'interface', 
                        config['user_connection'], 'metric=auto'], check=True)
-        print(f"已重置 {config['user_connection']} 的IPv4跃点数")
+        print(f"已重置 {config['user_connection']} 的 IPv4 跃点数为自动")
     except subprocess.CalledProcessError as e:
-        print(f"重置 {config['user_connection']} 的IPv4跃点数时出错: {e}")
+        print(f"重置 {config['user_connection']} 的 IPv4 跃点数时出错: {e}")
 
     try:
+        # 重置 IPv6 跃点数为自动
         subprocess.run(['netsh', 'interface', 'ipv6', 'set', 'interface', 
                        config['campus_connection'], 'metric=auto'], check=True)
-        print(f"已重置 {config['campus_connection']} 的IPv6跃点数")
+        print(f"已重置 {config['campus_connection']} 的 IPv6 跃点数为自动")
     except subprocess.CalledProcessError as e:
-        print(f"重置 {config['campus_connection']} 的IPv6跃点数时出错: {e}")
+        print(f"重置 {config['campus_connection']} 的 IPv6 跃点数时出错: {e}")
 
     # 删除路由
     for ip_cidr in config['ip_cidrs']:
@@ -69,8 +71,8 @@ def reset_settings():
             print(f"删除路由 {ip}/{cidr} 时出错: {e}")
 
     print("\n重置完成！")
-    os.remove(CONFIG_FILE)
-    print("已删除配置文件。")
+    # 不再删除配置文件
+    print("配置已重置，但配置文件保留。")
 
 def get_network_connections():
     try:
@@ -131,9 +133,25 @@ def get_gateway(connection):
 
 def set_metric(connection, protocol, metric):
     try:
-        subprocess.run(['netsh', 'interface', 'ipv6' if protocol == 'ipv6' else 'ipv4', 'set', 'interface', connection,
-                        f'metric={metric}', 'store=persistent'], check=True)
-        print(f"已将 {connection} 的 {protocol} 跃点数设置为 {metric}")
+        # 先禁用自动跃点
+        if protocol == 'ipv4':
+            subprocess.run(['netsh', 'interface', 'ipv4', 'set', 'interface', connection,
+                          'metric=auto', 'store=persistent'], check=True)
+            print(f"已禁用 {connection} 的 IPv4 自动跃点")
+        elif protocol == 'ipv6':
+            subprocess.run(['netsh', 'interface', 'ipv6', 'set', 'interface', connection,
+                          'metric=auto', 'store=persistent'], check=True)
+            print(f"已禁用 {connection} 的 IPv6 自动跃点")
+            
+        # 然后设置具体的跃点值
+        if protocol == 'ipv4':
+            subprocess.run(['netsh', 'interface', 'ipv4', 'set', 'interface', connection,
+                          f'metric={metric}', 'store=persistent'], check=True)
+            print(f"已将 {connection} 的 IPv4 跃点数设置为 {metric}")
+        elif protocol == 'ipv6':
+            subprocess.run(['netsh', 'interface', 'ipv6', 'set', 'interface', connection,
+                          f'metric={metric}', 'store=persistent'], check=True)
+            print(f"已将 {connection} 的 IPv6 跃点数设置为 {metric}")
     except subprocess.CalledProcessError as e:
         print(f"设置 {connection} 的 {protocol} 跃点数时出错: {e}")
 
@@ -156,6 +174,28 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == '--reset':
         reset_settings()
         sys.exit(0)
+
+    # 检查是否存在配置文件
+    config = load_config()
+    if config:
+        print("\n发现已保存的配置：")
+        print(f"你的网络连接: {config['user_connection']}")
+        print(f"校园网络连接: {config['campus_connection']}")
+        use_saved = input("\n是否使用已保存的配置？(y/n): ")
+        if use_saved.lower() == 'y':
+            user_connection = config['user_connection']
+            campus_connection = config['campus_connection']
+            user_gateway = config['user_gateway']
+            campus_gateway = config['campus_gateway']
+            
+            print("\n开始设置跃点数...")
+            set_metric(campus_connection, 'ipv6', 1)
+            set_metric(user_connection, 'ipv4', 1)
+
+            print("\n开始添加路由...")
+            add_routes(campus_gateway, config['ip_cidrs'])
+            print("\n路由配置完成！")
+            sys.exit(0)
 
     connections = get_network_connections()
     if not connections:
