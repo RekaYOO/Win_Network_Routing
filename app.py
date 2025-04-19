@@ -4,27 +4,32 @@ import json
 import os
 
 # 配置文件路径
-CONFIG_FILE = 'network_config.json'
+CONFIG_FILE = os.path.join('config', 'network_config.json')
+
+# NEU路由配置列表
+IP_CIDRS = [
+    "IP-CIDR,202.118.0.0/19,DIRECT",
+    "IP-CIDR,202.199.0.0/20,DIRECT",
+    "IP-CIDR,210.30.192.0/20,DIRECT",
+    "IP-CIDR,219.216.64.0/18,DIRECT",
+    "IP-CIDR,58.154.160.0/19,DIRECT",
+    "IP-CIDR,58.154.192.0/18,DIRECT",
+    "IP-CIDR,118.202.0.0/19,DIRECT",
+    "IP-CIDR,118.202.32.0/20,DIRECT",
+    "IP-CIDR,172.16.0.0/12,DIRECT",
+    "IP-CIDR,100.64.0.0/10,DIRECT",
+    "IP-CIDR,192.168.1.1/24,DIRECT"
+]
 
 def save_config(user_connection, campus_connection, user_gateway, campus_gateway):
+    # 确保配置目录存在
+    os.makedirs('config', exist_ok=True)
     config = {
         'user_connection': user_connection,
         'campus_connection': campus_connection,
         'user_gateway': user_gateway,
         'campus_gateway': campus_gateway,
-        'ip_cidrs': [
-            "IP-CIDR,202.118.0.0/19,DIRECT",
-            "IP-CIDR,202.199.0.0/20,DIRECT",
-            "IP-CIDR,210.30.192.0/20,DIRECT",
-            "IP-CIDR,219.216.64.0/18,DIRECT",
-            "IP-CIDR,58.154.160.0/19,DIRECT",
-            "IP-CIDR,58.154.192.0/18,DIRECT",
-            "IP-CIDR,118.202.0.0/19,DIRECT",
-            "IP-CIDR,118.202.32.0/20,DIRECT",
-            "IP-CIDR,172.16.0.0/12,DIRECT",
-            "IP-CIDR,100.64.0.0/10,DIRECT",
-            "IP-CIDR,192.168.1.1/24,DIRECT"
-        ]
+        'ip_cidrs': IP_CIDRS
     }
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
@@ -135,25 +140,41 @@ def set_metric(connection, protocol, metric):
     try:
         # 先禁用自动跃点
         if protocol == 'ipv4':
-            subprocess.run(['netsh', 'interface', 'ipv4', 'set', 'interface', connection,
-                          'metric=auto', 'store=persistent'], check=True)
+            result = subprocess.run(['netsh', 'interface', 'ipv4', 'set', 'interface', connection,
+                                  'metric=auto', 'store=persistent'], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"禁用自动跃点失败: {result.stderr}")
+                return False
             print(f"已禁用 {connection} 的 IPv4 自动跃点")
+            
+            # 然后设置具体的跃点值
+            result = subprocess.run(['netsh', 'interface', 'ipv4', 'set', 'interface', connection,
+                                  f'metric={metric}', 'store=persistent'], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"设置跃点数失败: {result.stderr}")
+                return False
+            print(f"已将 {connection} 的 IPv4 跃点数设置为 {metric}")
+            
         elif protocol == 'ipv6':
-            subprocess.run(['netsh', 'interface', 'ipv6', 'set', 'interface', connection,
-                          'metric=auto', 'store=persistent'], check=True)
+            result = subprocess.run(['netsh', 'interface', 'ipv6', 'set', 'interface', connection,
+                                  'metric=auto', 'store=persistent'], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"禁用自动跃点失败: {result.stderr}")
+                return False
             print(f"已禁用 {connection} 的 IPv6 自动跃点")
             
-        # 然后设置具体的跃点值
-        if protocol == 'ipv4':
-            subprocess.run(['netsh', 'interface', 'ipv4', 'set', 'interface', connection,
-                          f'metric={metric}', 'store=persistent'], check=True)
-            print(f"已将 {connection} 的 IPv4 跃点数设置为 {metric}")
-        elif protocol == 'ipv6':
-            subprocess.run(['netsh', 'interface', 'ipv6', 'set', 'interface', connection,
-                          f'metric={metric}', 'store=persistent'], check=True)
+            # 然后设置具体的跃点值
+            result = subprocess.run(['netsh', 'interface', 'ipv6', 'set', 'interface', connection,
+                                  f'metric={metric}', 'store=persistent'], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"设置跃点数失败: {result.stderr}")
+                return False
             print(f"已将 {connection} 的 IPv6 跃点数设置为 {metric}")
-    except subprocess.CalledProcessError as e:
+            
+        return True
+    except Exception as e:
         print(f"设置 {connection} 的 {protocol} 跃点数时出错: {e}")
+        return False
 
 
 def add_routes(gateway, ip_cidrs):
@@ -242,21 +263,7 @@ if __name__ == "__main__":
         set_metric(user_connection, 'ipv4', 1)
 
         print("\n开始添加路由...")
-        # 适用于东北大学的路由配置
-        ip_cidrs = [
-            "IP-CIDR,202.118.0.0/19,DIRECT",
-            "IP-CIDR,202.199.0.0/20,DIRECT",
-            "IP-CIDR,210.30.192.0/20,DIRECT",
-            "IP-CIDR,219.216.64.0/18,DIRECT",
-            "IP-CIDR,58.154.160.0/19,DIRECT",
-            "IP-CIDR,58.154.192.0/18,DIRECT",
-            "IP-CIDR,118.202.0.0/19,DIRECT",
-            "IP-CIDR,118.202.32.0/20,DIRECT",
-            "IP-CIDR,172.16.0.0/12,DIRECT",
-            "IP-CIDR,100.64.0.0/10,DIRECT",
-            "IP-CIDR,192.168.1.1/24,DIRECT"
-        ]
-        add_routes(campus_gateway, ip_cidrs)
+        add_routes(campus_gateway, IP_CIDRS)
         
         # 保存配置
         save_config(user_connection, campus_connection, user_gateway, campus_gateway)

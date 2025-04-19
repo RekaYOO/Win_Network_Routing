@@ -44,4 +44,4 @@ custom_routes.json
 Thumbs.db
 
 # Configuration files
-network_config.json 
+config/ 
